@@ -1,5 +1,7 @@
 from openai import OpenAI
 import os
+import json
+import re
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -46,7 +48,18 @@ Content:
 
     raw_output = response.choices[0].message.content
 
-    return {
-        "success": True,
-        "raw_output": raw_output
-    }
+    # Remove markdown ```json ```
+    cleaned = re.sub(r"```json|```", "", raw_output).strip()
+
+    try:
+        parsed = json.loads(cleaned)
+        return {
+            "success": True,
+            "data": parsed
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": "Failed to parse JSON",
+            "raw_output": raw_output
+        }
