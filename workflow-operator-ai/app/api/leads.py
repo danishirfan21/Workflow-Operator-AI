@@ -7,6 +7,7 @@ from app.api.schemas import LeadCreate, LeadResponse
 from app.tools.company_scraper import fetch_company_website
 from app.agents.research_agent import run_research_agent
 from app.agents.qualification_agent import run_qualification_agent
+from app.agents.email_agent import run_email_agent
 
 router = APIRouter(prefix="/api/leads", tags=["Leads"])
 
@@ -48,3 +49,19 @@ def qualify_company(url: str):
 
     result = run_qualification_agent(research["data"])
     return result
+
+@router.get("/generate-email")
+def generate_email(url: str):
+    scraped = fetch_company_website(url)
+    research = run_research_agent(scraped)
+
+    if not research["success"]:
+        return research
+
+    qualification = run_qualification_agent(research["data"])
+
+    if not qualification["success"]:
+        return qualification
+
+    email = run_email_agent(research["data"], qualification["data"])
+    return email
