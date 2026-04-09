@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from app.db.session import engine, Base
 from app.api.leads import router as leads_router
+from app.api.approvals import router as approvals_router
 
 app = FastAPI(
     title="Workflow Operator AI",
@@ -16,3 +17,4 @@ def health_check():
 
 # Register routes
 app.include_router(leads_router)
+app.include_router(approvals_router)
