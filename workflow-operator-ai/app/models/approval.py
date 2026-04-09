@@ -9,6 +9,7 @@ class Approval(Base):
     type = Column(String)  # email, decision, etc
     content = Column(JSON)  # JSON string
 
-    status = Column(String, default="pending")  # pending, approved, rejected
-
+    status = Column(String, default="pending", index=True)  # pending, approved, rejected
+    
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
