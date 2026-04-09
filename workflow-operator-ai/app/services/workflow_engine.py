@@ -1,3 +1,4 @@
+import json
 from sqlalchemy.orm import Session
 from app.models.lead import Lead
 from app.models.approval import Approval
@@ -10,6 +11,7 @@ from app.agents.email_agent import run_email_agent
 from datetime import datetime
 from app.models.workflow import WorkflowRun
 from app.services.logger import log_step_start, log_step_success, log_step_failure
+from app.models.lead_research import LeadResearch
 
 
 def run_lead_workflow(lead_id: int, db):
@@ -51,12 +53,36 @@ def run_lead_workflow(lead_id: int, db):
         if not research["success"]:
             raise Exception("Research failed")
 
-        log_step_success(db, step, research["data"])
+        research_data = research["data"]
+
+        log_step_success(db, step, research_data)
+
+        # Store in lead_research table
+        lead_research_record = LeadResearch(
+            lead_id=lead.id,
+            company_summary=research_data.get("company_summary"),
+            industry=research_data.get("industry"),
+            possible_use_cases_for_ai=research_data.get("possible_use_cases_for_ai"),
+            target_customer_type=research_data.get("target_customer_type"),
+            confidence=float(research_data.get("confidence", 0)),
+            raw_data=json.loads(json.dumps(research_data))
+        )
+
+        db.add(lead_research_record)
+
+        try:
+            db.commit()
+            db.refresh(lead_research_record)
+            print("LeadResearch saved:", lead_research_record.id)
+        except Exception as e:
+            db.rollback()
+            print("Error saving LeadResearch:", str(e))
+            raise e
 
         # ---------------- STEP 4: Qualification ----------------
-        step = log_step_start(db, run.id, "qualification_agent", research["data"])
+        step = log_step_start(db, run.id, "qualification_agent", research_data)
 
-        qualification = run_qualification_agent(research["data"])
+        qualification = run_qualification_agent(research_data)
 
         if not qualification["success"]:
             raise Exception("Qualification failed")
@@ -79,7 +105,7 @@ def run_lead_workflow(lead_id: int, db):
         # ---------------- STEP 6: Email ----------------
         step = log_step_start(db, run.id, "email_agent", decision)
 
-        email = run_email_agent(research["data"], decision)
+        email = run_email_agent(research_data, decision)
 
         if not email["success"]:
             raise Exception("Email generation failed")
