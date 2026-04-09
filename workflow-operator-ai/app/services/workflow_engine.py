@@ -13,6 +13,7 @@ from app.models.workflow import WorkflowRun
 from app.services.logger import log_step_start, log_step_success, log_step_failure
 from app.models.lead_research import LeadResearch
 from app.models.lead_decision import LeadDecision
+from app.models.email_draft import EmailDraft
 
 
 def run_lead_workflow(lead_id: int, db):
@@ -134,14 +135,39 @@ def run_lead_workflow(lead_id: int, db):
         if not email["success"]:
             raise Exception("Email generation failed")
 
-        log_step_success(db, step, email["data"])
+        email_data = email["data"]
+
+        log_step_success(db, step, email_data)
+
+        # Store Email Draft
+        email_draft = EmailDraft(
+            lead_id=lead.id,
+            subject=email_data.get("subject"),
+            body=email_data.get("email_body"),
+            tone=email_data.get("tone"),
+            confidence=float(email_data.get("confidence", 0)),
+            status="draft"
+        )
+
+        db.add(email_draft)
+
+        try:
+            db.commit()
+            db.refresh(email_draft)
+            print("EmailDraft saved:", email_draft.id)
+        except Exception as e:
+            db.rollback()
+            print("Error saving EmailDraft:", str(e))
+            raise e
 
         # ---------------- STEP 7: Approval ----------------
         step = log_step_start(db, run.id, "create_approval", email["data"])
 
         approval = Approval(
             type="email",
-            content=email["data"]
+            content={
+                "email_draft_id": email_draft.id
+            }
         )
 
         db.add(approval)
