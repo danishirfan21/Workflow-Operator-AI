@@ -6,6 +6,7 @@ from app.models.lead import Lead
 from app.api.schemas import LeadCreate, LeadResponse
 from app.tools.company_scraper import fetch_company_website
 from app.agents.research_agent import run_research_agent
+from app.agents.qualification_agent import run_qualification_agent
 
 router = APIRouter(prefix="/api/leads", tags=["Leads"])
 
@@ -35,4 +36,15 @@ def test_scrape(url: str):
 def research_company(url: str):
     scraped = fetch_company_website(url)
     result = run_research_agent(scraped)
+    return result
+
+@router.get("/qualify")
+def qualify_company(url: str):
+    scraped = fetch_company_website(url)
+    research = run_research_agent(scraped)
+
+    if not research["success"]:
+        return research
+
+    result = run_qualification_agent(research["data"])
     return result
