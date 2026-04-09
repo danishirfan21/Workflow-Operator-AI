@@ -10,6 +10,7 @@ from app.agents.qualification_agent import run_qualification_agent
 from app.agents.email_agent import run_email_agent
 from app.models.approval import Approval
 from app.api.approvals import get_db
+from app.services.workflow_engine import run_lead_workflow
 
 router = APIRouter(prefix="/api/leads", tags=["Leads"])
 
@@ -83,3 +84,8 @@ def generate_email(url: str, db: Session = Depends(get_db)):
         "message": "Email sent for approval",
         "approval_id": approval.id
     }
+
+@router.post("/run-workflow/{lead_id}")
+def run_workflow(lead_id: int, db: Session = Depends(get_db)):
+    result = run_lead_workflow(lead_id, db)
+    return result
