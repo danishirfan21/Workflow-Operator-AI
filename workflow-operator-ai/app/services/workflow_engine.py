@@ -12,6 +12,7 @@ from datetime import datetime
 from app.models.workflow import WorkflowRun
 from app.services.logger import log_step_start, log_step_success, log_step_failure
 from app.models.lead_research import LeadResearch
+from app.models.lead_decision import LeadDecision
 
 
 def run_lead_workflow(lead_id: int, db):
@@ -90,6 +91,29 @@ def run_lead_workflow(lead_id: int, db):
         decision = qualification["data"]
 
         log_step_success(db, step, decision)
+
+        # Store Decision
+        lead_decision_record = LeadDecision(
+            lead_id=lead.id,
+            qualified=decision.get("qualified"),
+            score=decision.get("score"),
+            confidence=float(decision.get("confidence", 0)),
+            segment=decision.get("segment"),
+            recommended_action=decision.get("recommended_action"),
+            reasoning=decision.get("reasons") or decision.get("reasoning"),
+            raw_data=decision
+        )
+
+        db.add(lead_decision_record)
+
+        try:
+            db.commit()
+            db.refresh(lead_decision_record)
+            print("LeadDecision saved:", lead_decision_record.id)
+        except Exception as e:
+            db.rollback()
+            print("Error saving LeadDecision:", str(e))
+            raise e
 
         # ---------------- STEP 5: Decision ----------------
         if not decision.get("qualified"):
