@@ -14,6 +14,8 @@ from app.services.logger import log_step_start, log_step_success, log_step_failu
 from app.models.lead_research import LeadResearch
 from app.models.lead_decision import LeadDecision
 from app.models.email_draft import EmailDraft
+from app.models.evaluation_run import EvaluationRun
+from app.services.evaluation_service import evaluate_decision, evaluate_email
 
 
 def run_lead_workflow(lead_id: int, db):
@@ -127,6 +129,29 @@ def run_lead_workflow(lead_id: int, db):
                 "message": "Lead not qualified"
             }
 
+        # ---------------- EVALUATE DECISION ----------------
+
+        decision_eval = evaluate_decision(decision)
+
+        decision_eval_record = EvaluationRun(
+            run_id=run.id,
+            lead_id=lead.id,
+            evaluation_type="decision_quality",
+            score=decision_eval["score"],
+            result=decision_eval
+        )
+
+        db.add(decision_eval_record)
+
+        try:
+            db.commit()
+            db.refresh(decision_eval_record)
+            print("Decision Evaluation saved:", decision_eval_record.id)
+        except Exception as e:
+            db.rollback()
+            print("Error saving Decision Evaluation:", str(e))
+        
+
         # ---------------- STEP 6: Email ----------------
         step = log_step_start(db, run.id, "email_agent", decision)
 
@@ -159,6 +184,28 @@ def run_lead_workflow(lead_id: int, db):
             db.rollback()
             print("Error saving EmailDraft:", str(e))
             raise e
+
+        # ---------------- EVALUATE EMAIL ----------------
+
+        email_eval = evaluate_email(email_data)
+
+        email_eval_record = EvaluationRun(
+            run_id=run.id,
+            lead_id=lead.id,
+            evaluation_type="email_quality",
+            score=email_eval["score"],
+            result=email_eval
+        )
+
+        db.add(email_eval_record)
+
+        try:
+            db.commit()
+            db.refresh(email_eval_record)
+            print("Email Evaluation saved:", email_eval_record.id)
+        except Exception as e:
+            db.rollback()
+            print("Error saving Email Evaluation:", str(e))
 
         # ---------------- STEP 7: Approval ----------------
         step = log_step_start(db, run.id, "create_approval", email["data"])
