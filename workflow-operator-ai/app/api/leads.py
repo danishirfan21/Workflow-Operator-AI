@@ -1,7 +1,7 @@
 import json
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from app.db.session import SessionLocal
+from app.db.session import SessionLocal, get_db
 from app.models.lead import Lead
 from app.api.schemas import LeadCreate, LeadResponse
 from app.tools.company_scraper import fetch_company_website
@@ -9,18 +9,11 @@ from app.agents.research_agent import run_research_agent
 from app.agents.qualification_agent import run_qualification_agent
 from app.agents.email_agent import run_email_agent
 from app.models.approval import Approval
-from app.api.approvals import get_db
+
 from app.services.workflow_engine import run_lead_workflow
 
 router = APIRouter(prefix="/api/leads", tags=["Leads"])
 
-# Dependency to get DB session
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 @router.post("/ingest", response_model=LeadResponse)
 def ingest_lead(lead: LeadCreate, db: Session = Depends(get_db)):
