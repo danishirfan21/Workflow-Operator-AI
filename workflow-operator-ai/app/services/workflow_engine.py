@@ -16,6 +16,7 @@ from app.models.lead_decision import LeadDecision
 from app.models.email_draft import EmailDraft
 from app.models.evaluation_run import EvaluationRun
 from app.services.evaluation_service import evaluate_decision, evaluate_email
+from app.tools.email_sender import send_email
 
 
 def run_lead_workflow(lead_id: int, db):
@@ -207,32 +208,69 @@ def run_lead_workflow(lead_id: int, db):
             db.rollback()
             print("Error saving Email Evaluation:", str(e))
 
-        # ---------------- STEP 7: Approval ----------------
-        step = log_step_start(db, run.id, "create_approval", email["data"])
+        # ---------------- STEP 7: CONDITIONAL SEND ----------------
+        AUTO_SEND_THRESHOLD = 0.8  # IMPORTANT: your confidence is 0–1 scale
 
-        approval = Approval(
-            type="email",
-            content={
+        if email_draft.confidence >= AUTO_SEND_THRESHOLD:
+
+            step = log_step_start(db, run.id, "send_email", {
                 "email_draft_id": email_draft.id
-            }
-        )
+            })
 
-        db.add(approval)
-        db.commit()
-        db.refresh(approval)
+            if not lead.email:
+                raise Exception("Missing email for sending")
 
-        log_step_success(db, step, {"approval_id": approval.id})
+            result = send_email(
+                to_email=lead.email,
+                subject=email_draft.subject,
+                content=email_draft.body
+            )
+
+            if result["success"]:
+                email_draft.status = "sent"
+                email_draft.sent_at = datetime.utcnow()
+
+                db.commit()
+
+                log_step_success(db, step, result)
+
+            else:
+                email_draft.status = "failed"
+                db.commit()
+
+                log_step_failure(db, step, result["error"])
+
+        else:
+            # fallback → approval
+            step = log_step_start(db, run.id, "create_approval", email_data)
+
+            approval = Approval(
+                type="email",
+                content={
+                    "email_draft_id": email_draft.id
+                }
+            )
+
+            db.add(approval)
+            db.commit()
+            db.refresh(approval)
+
+            log_step_success(db, step, {"approval_id": approval.id})
 
         # ---------------- FINAL ----------------
         run.status = "success"
         run.finished_at = datetime.utcnow()
         db.commit()
 
-        return {
+        response = {
             "success": True,
-            "approval_id": approval.id,
             "run_id": run.id
         }
+
+        if 'approval' in locals():
+            response["approval_id"] = approval.id
+
+        return response
 
     except Exception as e:
         run.status = "failed"
